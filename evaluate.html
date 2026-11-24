@@ -8,6 +8,7 @@
 <style>
   :root { --ink:#1c1f1d; --muted:#5f6661; --line:#dfe3df; --bg:#f6f7f4; --brand:#1b5e20; --bad:#b3261e; }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
   main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { margin: 0; font-size: 24px; color: var(--brand); }
@@ -97,7 +98,7 @@
   });
 
   TT.load().then(r => {
-    const missing = keys.filter(k => !TT.labels.some(l => l.trim().toLowerCase() === k));
+    const missing = keys.filter(k => !TT.labels.some(l => TT.keyOf(l) === k));
     $("status").textContent = TT.demo ? "Demo mode ready." :
       "Model loaded: " + TT.labels.join(", ") + (missing.length ? " · Not in model: " + missing.map(label).join(", ") : "");
     $("runBtn").disabled = false;
@@ -116,7 +117,7 @@
       const c = TT.toCanvas(img, img.naturalWidth, img.naturalHeight);
       const preds = await TT.predict(c, label(k));
       const top = preds[0];
-      const pk = top.className.trim().toLowerCase();
+      const pk = TT.keyOf(top.className);
       const thumb = TT.toCanvas(img, img.naturalWidth, img.naturalHeight);
       const small = document.createElement("canvas");
       small.width = 200; small.height = Math.round(200 * thumb.height / thumb.width);

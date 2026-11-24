@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b5e20">
+<title>TaponTama · Throw it right</title>
+<style>
+  :root {
+    --ink: #1c1f1d; --muted: #5f6661; --line: #dfe3df; --bg: #f6f7f4; --card: #fff;
+    --brand: #1b5e20; --brand-soft: #e8f2e8; --warn: #b26a00; --warn-soft: #fff4e0;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased;
+  }
+  .app { max-width: 480px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; padding: 0 16px 24px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 0 12px; }
+  .logo { font-weight: 800; font-size: 22px; letter-spacing: -0.02em; color: var(--brand); }
+  .logo small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); letter-spacing: 0; }
+  .link { background: none; border: 0; color: var(--muted); font: inherit; font-size: 14px; text-decoration: underline; padding: 8px; cursor: pointer; }
+  .screen { display: none; flex-direction: column; gap: 14px; flex: 1; }
+  .screen.on { display: flex; }
+
+  .viewer { position: relative; background: #111; border-radius: var(--radius); overflow: hidden; aspect-ratio: 3 / 4; }
+  .viewer video, .viewer canvas, .viewer img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .viewer .frame { position: absolute; inset: 14%; border: 3px solid rgba(255,255,255,.85); border-radius: 18px; pointer-events: none; }
+  .viewer .msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+                 color: #fff; padding: 24px; font-size: 15px; line-height: 1.4; background: #1d211e; }
+  .hint { text-align: center; color: var(--muted); font-size: 14px; margin: 0; }
+
+  .btn { appearance: none; border: 0; border-radius: 14px; font: inherit; font-weight: 700; font-size: 18px;
+         padding: 18px; width: 100%; cursor: pointer; background: var(--brand); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.ghost { background: var(--card); color: var(--ink); border: 1.5px solid var(--line); font-weight: 600; font-size: 16px; padding: 14px; }
+  label.btn { text-align: center; }
+  input[type=file] { display: none; }
+
+  .thumb { border-radius: var(--radius); overflow: hidden; aspect-ratio: 4 / 3; background: #ddd; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 18px; border: 1px solid var(--line); }
+  .verdict { text-align: center; }
+  .verdict .cls { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; margin: 2px 0 8px; }
+  .bin-chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 8px 14px; border-radius: 999px; color: #fff; }
+  .bin-chip i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,.9); }
+  .conf { color: var(--muted); font-size: 14px; margin-top: 10px; }
+  .tip { background: var(--brand-soft); border-radius: 12px; padding: 14px 16px; font-size: 16px; line-height: 1.45; }
+  .tip b { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--brand); margin-bottom: 4px; }
+  .notsure .cls { color: var(--warn); }
+  .notsure .tip { background: var(--warn-soft); }
+  .notsure .tip b { color: var(--warn); }
+
+  details { font-size: 14px; color: var(--muted); }
+  details summary { cursor: pointer; padding: 4px 0; }
+  .bars { display: grid; gap: 8px; margin-top: 10px; }
+  .bar { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 8px; color: var(--ink); }
+  .bar .track { height: 10px; background: #edf0ed; border-radius: 6px; overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 6px; background: #9aa59d; }
+  .bar.top .fill { background: var(--brand); }
+  .bar span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .speed { font-size: 12px; color: var(--muted); text-align: center; }
+
+  .demo-badge { background: #fde68a; color: #6b4e00; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+  .about h2 { margin: 0 0 6px; font-size: 20px; }
+  .about p, .about li { line-height: 1.5; font-size: 15px; }
+  .about ul { padding-left: 20px; margin: 6px 0; }
+  .loading { text-align: center; color: var(--muted); padding: 40px 0; }
+  .error { background: #fdecea; color: #8a1c13; border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.45; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">TaponTama<small>Throw it right · AI waste-sorting helper</small></div>
+    <span id="demoBadge" class="demo-badge" hidden>DEMO</span>
+  </header>
+
+  <!-- Loading -->
+  <section id="sLoading" class="screen on">
+    <p class="loading" id="loadingText">Loading the model…</p>
+  </section>
+
+  <!-- 1. Scan -->
+  <section id="sScan" class="screen">
+    <div class="viewer">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="frame"></div>
+      <div class="msg" id="camMsg">Starting the camera…</div>
+    </div>
+    <p class="hint">Point at <b>one</b> item and fill the box.</p>
+    <button class="btn" id="checkBtn" disabled>Check this item</button>
+    <label class="btn ghost" for="fileInput">Upload a photo instead</label>
+    <input type="file" id="fileInput" accept="image/*">
+    <button class="link" id="aboutBtn">About and limitations</button>
+  </section>
+
+  <!-- 2. Result / 3. Not sure (same screen, different style) -->
+  <section id="sResult" class="screen">
+    <div class="thumb"><img id="resultImg" alt="Your photo"></div>
+    <div class="card verdict" id="verdict">
+      <div class="cls" id="resultClass"></div>
+      <div id="binWrap"><span class="bin-chip" id="binChip"><i></i><span id="binName"></span></span></div>
+      <div class="conf" id="resultConf"></div>
+    </div>
+    <div class="tip" id="tipBox"><b id="tipTitle">Next action</b><span id="tipText"></span></div>
+    <button class="btn" id="againBtn">Scan another item</button>
+    <details class="card">
+      <summary>How sure is the app?</summary>
+      <div class="bars" id="bars"></div>
+    </details>
+    <p class="speed" id="speed"></p>
+  </section>
+
+  <!-- About -->
+  <section id="sAbout" class="screen">
+    <div class="card about">
+      <h2>About TaponTama</h2>
+      <p>TaponTama looks at a photo of one piece of trash and tells you which segregation bin it belongs in: <b>Biodegradable</b>, <b>Recyclable</b> or <b>Residual</b>.</p>
+      <p><b>It is a student learning project</b> (ELECT IT-E1 Applied Machine Learning, PUP Santa Rosa Campus). It can be wrong. When in doubt, follow the signs on the bins and the campus staff.</p>
+      <p><b>Limitations</b></p>
+      <ul>
+        <li>One item per photo. Several items at once will confuse it.</li>
+        <li>It was trained on our own photos of common campus items, so unusual items may be misread.</li>
+        <li>Special waste (batteries, medicine, electronics, broken glass) is <b>not covered</b>. Ask the campus staff where it goes.</li>
+        <li>If it is less than <span id="thrText">70%</span> sure, it says <b>Not sure</b> instead of guessing.</li>
+      </ul>
+      <p><b>Privacy:</b> your photo is checked on your own phone. It is never uploaded or saved.</p>
+    </div>
+    <button class="btn" id="backBtn">Back to scanning</button>
+  </section>
+</div>
+
+<script src="config.js"></script>
+<script src="tapontama.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const screens = ["sLoading", "sScan", "sResult", "sAbout"];
+  const show = id => screens.forEach(s => $(s).classList.toggle("on", s === id));
+  let stream = null;
+
+  $("thrText").textContent = Math.round(TT.cfg.THRESHOLD * 100) + "%";
+  if (TT.demo) $("demoBadge").hidden = false;
+
+  // ---------- camera ----------
+  async function startCamera() {
+    if (stream) return;
+    const msg = $("camMsg");
+    msg.hidden = false;
+    msg.textContent = "Starting the camera…";
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("no camera API");
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } },
+        audio: false
+      });
+      const v = $("video");
+      v.srcObject = stream;
+      await v.play();
+      msg.hidden = true;
+      $("checkBtn").disabled = false;
+    } catch (e) {
+      msg.textContent = "Camera not available. Allow camera access in your browser, or use “Upload a photo instead”.";
+      $("checkBtn").disabled = true;
+    }
+  }
+  function stopCamera() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    $("checkBtn").disabled = true;
+  }
+
+  // ---------- classify ----------
+  async function classify(canvas) {
+    const t0 = performance.now();
+    const preds = await TT.predict(canvas);
+    const ms = performance.now() - t0;
+    render(canvas.toDataURL("image/jpeg", 0.85), preds, ms);
+  }
+
+  function render(dataUrl, preds, ms) {
+    const d = TT.decide(preds);
+    const pct = Math.round(d.top.probability * 100);
+    $("resultImg").src = dataUrl;
+    document.querySelector("#sResult").classList.toggle("notsure", d.kind !== "bin");
+
+    if (d.kind === "bin") {
+      $("resultClass").textContent = d.info.label.toUpperCase();
+      $("resultClass").style.color = d.info.color;
+      $("binWrap").hidden = false;
+      $("binChip").style.background = d.info.color;
+      $("binName").textContent = d.info.bin;
+      $("resultConf").textContent = pct + "% sure";
+      $("tipTitle").textContent = "Next action";
+      $("tipText").textContent = d.info.tip;
+      $("againBtn").textContent = "Scan another item";
+    } else {
+      $("resultClass").textContent = "Not sure";
+      $("resultClass").style.color = "";
+      $("binWrap").hidden = true;
+      if (d.kind === "noitem") {
+        $("resultConf").textContent = "No item found in the photo.";
+        $("tipText").textContent = "Hold one item in front of the camera so it fills most of the box, then try again.";
+      } else {
+        $("resultConf").textContent = "Best guess: " + d.info.label + " (" + pct + "%), below " + Math.round(TT.cfg.THRESHOLD * 100) + "%.";
+        $("tipText").textContent = "Move closer, use better light, and show only one item. If it still says Not sure, check the bin signs or ask the campus staff.";
+      }
+      $("tipTitle").textContent = "Try again";
+      $("againBtn").textContent = "Retake photo";
+    }
+
+    $("bars").innerHTML = preds.map((p, i) => {
+      const w = Math.round(p.probability * 100);
+      const lbl = TT.info(p.className).label;
+      return `<div class="bar${i === 0 ? " top" : ""}"><span>${lbl}</span><div class="track"><div class="fill" style="width:${w}%"></div></div><span>${w}%</span></div>`;
+    }).join("");
+    $("speed").textContent = "Result in " + (ms / 1000).toFixed(2) + " s" + (TT.demo ? " · demo result, not a real model" : "");
+    stopCamera();
+    show("sResult");
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- events ----------
+  $("checkBtn").onclick = async () => {
+    const v = $("video");
+    if (!v.videoWidth) return;
+    $("checkBtn").disabled = true;
+    $("checkBtn").textContent = "Checking…";
+    try { await classify(TT.toCanvas(v, v.videoWidth, v.videoHeight)); }
+    finally { $("checkBtn").textContent = "Check this item"; }
+  };
+  $("fileInput").onchange = async e => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    const img = await TT.fileToImage(f);
+    await classify(TT.toCanvas(img, img.naturalWidth, img.naturalHeight));
+  };
+  $("againBtn").onclick = () => { show("sScan"); startCamera(); };
+  $("aboutBtn").onclick = () => { stopCamera(); show("sAbout"); };
+  $("backBtn").onclick = () => { show("sScan"); startCamera(); };
+
+  // ---------- start ----------
+  TT.load().then(r => {
+    if (r.unknown && r.unknown.length) console.warn("Class names not in config.js:", r.unknown);
+    show("sScan");
+    startCamera();
+  }).catch(err => {
+    $("loadingText").innerHTML = `<div class="error"><b>The model could not be loaded.</b><br>${err.message}<br><br>Check MODEL_URL in config.js and that the model folder has model.json, metadata.json and weights.bin.</div>`;
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaponTama · Model evaluation</title>
+<style>
+  :root { --ink:#1c1f1d; --muted:#5f6661; --line:#dfe3df; --bg:#f6f7f4; --brand:#1b5e20; --bad:#b3261e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { margin: 0; font-size: 24px; color: var(--brand); }
+  h2 { font-size: 18px; margin: 28px 0 10px; }
+  .sub { color: var(--muted); margin: 4px 0 18px; line-height: 1.5; }
+  .note { background: #fff4e0; border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card b { display: block; margin-bottom: 8px; }
+  .card .count { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .btn { border: 0; border-radius: 10px; background: var(--brand); color: #fff; font: inherit; font-weight: 700; padding: 12px 18px; cursor: pointer; }
+  .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+  #status { color: var(--muted); font-size: 14px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .stat { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .stat .v { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .k { color: var(--muted); font-size: 13px; }
+  table { border-collapse: collapse; background: #fff; font-variant-numeric: tabular-nums; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: center; font-size: 14px; }
+  th { background: #f0f2ef; font-weight: 600; }
+  td.diag { font-weight: 800; }
+  .axis { color: var(--muted); font-size: 12px; font-weight: 500; }
+  .wrong { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .wrong figure { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 12px; }
+  .wrong img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .wrong figcaption { padding: 8px; line-height: 1.4; }
+  .wrong .bad { color: var(--bad); font-weight: 700; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TaponTama · Model evaluation</h1>
+  <p class="sub">Upload your <b>unseen test photos</b> for each true class, then press Run. The page gives the confusion matrix, accuracy, precision and recall for Phase 3 (R3), plus the list of photos the model got wrong.</p>
+  <p class="note">Use only photos that were <b>never uploaded to Teachable Machine</b>. Photos used in training make the model look better than it really is.</p>
+  <p class="note" id="demoNote" hidden><b>DEMO mode:</b> no model is set in config.js, so these results are fake. Use this only to see how the page works.</p>
+
+  <div class="grid" id="inputs"></div>
+  <div class="row">
+    <button class="btn" id="runBtn" disabled>Run evaluation</button>
+    <span id="status">Loading the model…</span>
+  </div>
+
+  <div id="results" hidden>
+    <h2>Summary</h2>
+    <div class="stats" id="stats"></div>
+
+    <h2>Confusion matrix <span class="axis">(rows = true class, columns = predicted class, top-1)</span></h2>
+    <div class="scroll"><table id="cm"></table></div>
+
+    <h2>Precision and recall per class</h2>
+    <div class="scroll"><table id="pr"></table></div>
+
+    <h2>Photos the model got wrong <span class="axis" id="wrongCount"></span></h2>
+    <div class="wrong" id="wrong"></div>
+
+    <div class="row">
+      <button class="btn ghost" id="csvImages">Download results per photo (CSV)</button>
+      <button class="btn ghost" id="csvMatrix">Download confusion matrix (CSV)</button>
+    </div>
+  </div>
+</main>
+
+<script src="config.js"></script>
+<script src="tapontama.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const keys = Object.keys(TT.cfg.CLASSES);              // config order
+  const label = k => TT.cfg.CLASSES[k].label;
+  const files = {};
+  let rows = [], matrix = null;
+
+  if (TT.demo) $("demoNote").hidden = false;
+
+  $("inputs").innerHTML = keys.map(k => `
+    <div class="card"><b>True class: ${label(k)}</b>
+      <input type="file" accept="image/*" multiple data-k="${k}">
+      <div class="count" id="count-${k.replace(/\W/g, "")}">0 photos</div></div>`).join("");
+  document.querySelectorAll("#inputs input").forEach(inp => {
+    inp.onchange = () => {
+      files[inp.dataset.k] = Array.from(inp.files);
+      $("count-" + inp.dataset.k.replace(/\W/g, "")).textContent = inp.files.length + " photos";
+    };
+  });
+
+  TT.load().then(r => {
+    const missing = keys.filter(k => !TT.labels.some(l => l.trim().toLowerCase() === k));
+    $("status").textContent = TT.demo ? "Demo mode ready." :
+      "Model loaded: " + TT.labels.join(", ") + (missing.length ? " · Not in model: " + missing.map(label).join(", ") : "");
+    $("runBtn").disabled = false;
+  }).catch(e => { $("status").textContent = "Model not loaded: " + e.message; });
+
+  $("runBtn").onclick = async () => {
+    const jobs = [];
+    keys.forEach(k => (files[k] || []).forEach(f => jobs.push({ k, f })));
+    if (!jobs.length) { $("status").textContent = "Choose some photos first."; return; }
+    $("runBtn").disabled = true;
+    rows = [];
+    for (let i = 0; i < jobs.length; i++) {
+      $("status").textContent = `Checking photo ${i + 1} of ${jobs.length}…`;
+      const { k, f } = jobs[i];
+      const img = await TT.fileToImage(f);
+      const c = TT.toCanvas(img, img.naturalWidth, img.naturalHeight);
+      const preds = await TT.predict(c, label(k));
+      const top = preds[0];
+      const pk = top.className.trim().toLowerCase();
+      const thumb = TT.toCanvas(img, img.naturalWidth, img.naturalHeight);
+      const small = document.createElement("canvas");
+      small.width = 200; small.height = Math.round(200 * thumb.height / thumb.width);
+      small.getContext("2d").drawImage(thumb, 0, 0, small.width, small.height);
+      rows.push({ file: f.name, trueKey: k, predKey: pk, conf: top.probability,
+                  answered: top.probability >= TT.cfg.THRESHOLD && !(TT.cfg.CLASSES[pk] || {}).isEmpty,
+                  thumb: small.toDataURL("image/jpeg", 0.7) });
+      URL.revokeObjectURL(img.src);
+    }
+    report();
+    $("status").textContent = `Done: ${rows.length} photos checked.`;
+    $("runBtn").disabled = false;
+  };
+
+  const pct = x => isNaN(x) ? "–" : (x * 100).toFixed(1) + "%";
+
+  function report() {
+    const n = keys.length;
+    matrix = keys.map(() => keys.map(() => 0));
+    rows.forEach(r => {
+      const i = keys.indexOf(r.trueKey), j = keys.indexOf(r.predKey);
+      if (i >= 0 && j >= 0) matrix[i][j]++;
+    });
+    const total = rows.length;
+    const correct = rows.filter(r => r.trueKey === r.predKey).length;
+    const answered = rows.filter(r => r.answered);
+    const answeredOk = answered.filter(r => r.trueKey === r.predKey).length;
+    const realItems = rows.filter(r => !TT.cfg.CLASSES[r.trueKey].isEmpty);
+    const notSure = realItems.filter(r => !r.answered).length;
+
+    $("stats").innerHTML = [
+      [total, "test photos"],
+      [pct(correct / total), "accuracy (top-1)"],
+      [pct(answered.length ? answeredOk / answered.length : NaN), `accuracy when the app shows a bin (≥ ${Math.round(TT.cfg.THRESHOLD * 100)}%)`],
+      [pct(realItems.length ? notSure / realItems.length : NaN), "of real items ended in “Not sure”"]
+    ].map(([v, k]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
+
+    const max = Math.max(1, ...matrix.flat());
+    let h = `<tr><th></th>${keys.map(k => `<th>${label(k)}</th>`).join("")}<th>Total</th></tr>`;
+    matrix.forEach((row, i) => {
+      h += `<tr><th>${label(keys[i])}</th>` + row.map((v, j) => {
+        const a = (v / max) * 0.55;
+        const col = i === j ? `rgba(27,94,32,${a})` : `rgba(179,38,30,${a})`;
+        return `<td class="${i === j ? "diag" : ""}" style="background:${v ? col : "#fff"}">${v}</td>`;
+      }).join("") + `<td>${row.reduce((a, b) => a + b, 0)}</td></tr>`;
+    });
+    $("cm").innerHTML = h;
+
+    let p = `<tr><th>Class</th><th>Test photos</th><th>Precision</th><th>Recall</th><th>F1</th></tr>`;
+    keys.forEach((k, i) => {
+      const tp = matrix[i][i];
+      const colSum = matrix.reduce((a, r) => a + r[i], 0);
+      const rowSum = matrix[i].reduce((a, b) => a + b, 0);
+      const prec = colSum ? tp / colSum : NaN, rec = rowSum ? tp / rowSum : NaN;
+      const f1 = prec + rec ? 2 * prec * rec / (prec + rec) : NaN;
+      p += `<tr><th>${label(k)}</th><td>${rowSum}</td><td>${pct(prec)}</td><td>${pct(rec)}</td><td>${pct(f1)}</td></tr>`;
+    });
+    $("pr").innerHTML = p;
+
+    const wrong = rows.filter(r => r.trueKey !== r.predKey);
+    $("wrongCount").textContent = `(${wrong.length})`;
+    $("wrong").innerHTML = wrong.length ? wrong.map(r => `<figure><img src="${r.thumb}" alt="">
+      <figcaption>${r.file}<br>True: ${label(r.trueKey)}<br><span class="bad">Predicted: ${(TT.cfg.CLASSES[r.predKey] || { label: r.predKey }).label} (${pct(r.conf)})</span></figcaption></figure>`).join("")
+      : "<p>None. Every test photo was classified correctly.</p>";
+
+    $("results").hidden = false;
+  }
+
+  function download(name, text) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    a.download = name;
+    a.click();
+  }
+  const q = s => `"${String(s).replace(/"/g, '""')}"`;
+  $("csvImages").onclick = () => download("tapontama_test_results.csv",
+    "file,true_class,predicted_class,confidence,correct,app_shows_bin\n" +
+    rows.map(r => [q(r.file), q(label(r.trueKey)), q((TT.cfg.CLASSES[r.predKey] || { label: r.predKey }).label),
+                   r.conf.toFixed(4), r.trueKey === r.predKey ? "yes" : "no", r.answered ? "yes" : "no"].join(",")).join("\n"));
+  $("csvMatrix").onclick = () => download("tapontama_confusion_matrix.csv",
+    "true \\ predicted," + keys.map(k => q(label(k))).join(",") + "\n" +
+    matrix.map((row, i) => q(label(keys[i])) + "," + row.join(",")).join("\n"));
+})();
+</script>
+</body>
+</html>

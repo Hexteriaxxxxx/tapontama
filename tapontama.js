@@ -22,10 +22,21 @@ const TT = (() => {
     });
   }
 
+  // Find the config key for a class name from the model.
+  // Forgiving on purpose: ignores capital letters, extra spaces and a cut-off
+  // ending such as "Biodegradabl..." (Teachable Machine can shorten long names).
+  function norm(x) { return String(x).toLowerCase().replace(/[\u2026.]+$/, "").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim(); }
+  function keyOf(className) {
+    const n = norm(className);
+    const keys = Object.keys(cfg.CLASSES);
+    return keys.find(k => norm(k) === n) ||
+           keys.find(k => n.length >= 4 && (norm(k).startsWith(n) || n.startsWith(norm(k)))) ||
+           n;
+  }
+
   // Look up the display info for a class name from the model.
   function info(className) {
-    const key = String(className).trim().toLowerCase();
-    return cfg.CLASSES[key] || { label: className, bin: className, color: "#555", tip: "" };
+    return cfg.CLASSES[keyOf(className)] || { label: className, bin: className, color: "#555", tip: "" };
   }
 
   async function load() {
@@ -38,7 +49,7 @@ const TT = (() => {
     if (!base.endsWith("/")) base += "/";
     model = await tmImage.load(base + "model.json", base + "metadata.json");
     labels = model.getClassLabels();
-    const unknown = labels.filter(l => !cfg.CLASSES[String(l).trim().toLowerCase()]);
+    const unknown = labels.filter(l => !cfg.CLASSES[keyOf(l)]);
     return { demo: false, labels, unknown };
   }
 
@@ -91,5 +102,5 @@ const TT = (() => {
     });
   }
 
-  return { cfg, demo, load, predict, decide, info, toCanvas, fileToImage, get labels() { return labels; } };
+  return { cfg, demo, load, predict, decide, info, keyOf, toCanvas, fileToImage, get labels() { return labels; } };
 })();

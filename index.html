@@ -13,6 +13,7 @@
     --radius: 16px;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* make sure hidden overlays really disappear */
   html, body { margin: 0; height: 100%; }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -188,7 +189,7 @@
         e.name === "NotReadableError" ? "The camera is being used by another app (Zoom, Meet, Messenger…). Close it and try again." :
         e.message === "timeout" ? "The camera did not start. Check the camera permission in the address bar, then try again." :
         "The camera is not available on this device or browser.";
-      cameraFailed(why);
+      cameraFailed(why + `<br><small style="opacity:.7">(${e.name || "Error"}: ${e.message || ""})</small>`);
     }
   }
   function stopCamera() {

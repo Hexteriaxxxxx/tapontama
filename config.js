@@ -8,7 +8,7 @@ const TAPONTAMA_CONFIG = {
   //  - Or paste your Teachable Machine shareable link, e.g.
   //    "https://teachablemachine.withgoogle.com/models/AbC123xyz/"
   //  - Leave it as "" to run DEMO mode (fake results, for trying the screens).
-  MODEL_URL: "./model/",
+  MODEL_URL: "https://teachablemachine.withgoogle.com/models/pKGN3Iy_N/",
 
   // Below this confidence the app says "Not sure" instead of showing a bin.
   // 0.70 = 70%. Change it only if your Phase 3 testing shows a better value.

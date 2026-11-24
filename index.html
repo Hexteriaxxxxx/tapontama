@@ -147,25 +147,48 @@
   if (TT.demo) $("demoBadge").hidden = false;
 
   // ---------- camera ----------
+  // Gives up after `ms` milliseconds so the screen never stays stuck.
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+
+  function cameraFailed(reason) {
+    const msg = $("camMsg");
+    msg.hidden = false;
+    msg.innerHTML = `<div>${reason}<br><br>You can still use “Upload a photo instead” below.<br><br>
+      <button class="btn ghost" id="retryCam" style="width:auto;padding:10px 18px">Try the camera again</button></div>`;
+    $("retryCam").onclick = () => { stopCamera(); startCamera(); };
+    $("checkBtn").disabled = true;
+  }
+
   async function startCamera() {
     if (stream) return;
     const msg = $("camMsg");
     msg.hidden = false;
-    msg.textContent = "Starting the camera…";
+    msg.textContent = "Starting the camera… If your browser asks, tap Allow.";
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("no camera API");
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } },
-        audio: false
-      });
+      let s;
+      try {
+        // Rear camera on phones; any camera on laptops.
+        s = await withTimeout(navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }), 15000);
+      } catch (e) {
+        if (e.message === "timeout" || e.name === "NotAllowedError") throw e;
+        s = await withTimeout(navigator.mediaDevices.getUserMedia({ video: true, audio: false }), 15000);
+      }
+      stream = s;
       const v = $("video");
       v.srcObject = stream;
-      await v.play();
+      await withTimeout(v.play(), 8000);
       msg.hidden = true;
       $("checkBtn").disabled = false;
     } catch (e) {
-      msg.textContent = "Camera not available. Allow camera access in your browser, or use “Upload a photo instead”.";
-      $("checkBtn").disabled = true;
+      stopCamera();
+      const why =
+        e.name === "NotAllowedError" ? "Camera access was blocked. Allow the camera for this site in your browser settings." :
+        e.name === "NotFoundError" ? "No camera was found on this device." :
+        e.name === "NotReadableError" ? "The camera is being used by another app (Zoom, Meet, Messenger…). Close it and try again." :
+        e.message === "timeout" ? "The camera did not start. Check the camera permission in the address bar, then try again." :
+        "The camera is not available on this device or browser.";
+      cameraFailed(why);
     }
   }
   function stopCamera() {
